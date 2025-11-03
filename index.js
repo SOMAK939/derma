@@ -25,8 +25,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const medication = require("./models/medication"); // Assuming you have a Medication model
-const qrDir = path.join(__dirname, "public", "qrcodes");
+const qrDir = path.join("/tmp", "qrcodes");
 app.use(fileUpload());
+app.use(express.static(path.join(__dirname, "public")));
+
 if (!fs.existsSync(qrDir)) {
   fs.mkdirSync(qrDir, { recursive: true });
 }
@@ -69,10 +71,7 @@ const s3 = new S3Client({
 
 // MongoDB Connection
 mongoose
-  .connect(process.env.MONGO_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGO_URL)
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
@@ -94,7 +93,7 @@ const sessionStore = MongoStore.create({
 app.use(
   session({
     store: sessionStore,
-    secret: "your-secret-key",
+    secret: "123456789abcdefg",
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -281,11 +280,8 @@ app.post("/docregister", async (req, res) => {
       }
 
       const url = `http://localhost:10000/connect/${newDoctor.chatLink}`;
-      const qrFilePath = path.join(
-        __dirname,
-        "temp",
-        `${newDoctor._id}-qr.png`
-      );
+      const qrFilePath = path.join("/tmp", `${newDoctor._id}-qr.png`);
+
 
       // Ensure temp dir exists
       const tempDir = path.dirname(qrFilePath);
@@ -310,8 +306,17 @@ app.post("/docregister", async (req, res) => {
 
       const result = await upload.done();
 
-      newDoctor.qr = result.Location;
+     // Save QR code in temporary folder and upload directly to S3 instead of copying
+const localQrPath = path.join("/tmp", `${newDoctor._id}.png`);
+fs.copyFileSync(qrFilePath, localQrPath);
+
+
+      newDoctor.qr = `/qrcodes/${newDoctor._id}.png`;
       await newDoctor.save();
+
+      
+      
+      
 
       fs.unlinkSync(qrFilePath); // cleanup
 
@@ -411,7 +416,7 @@ app.post("/patientlogin", (req, res, next) => {
 });
 
 app.get("/doctor-dashboard", isDoctor, async (req, res) => {
-  const qrPath = `/qrcodes/${req.user._id}.png`;
+   req.user.qr = `/qrcodes/${req.user._id}.png`;
 
   const patients = await Patient.find({
     _id: { $in: req.user.patients },
@@ -428,10 +433,10 @@ app.get("/doctor-dashboard", isDoctor, async (req, res) => {
     const apptDateTime = new Date(`${appt.date}T${appt.time}`);
     return apptDateTime > now;
   });
-
+    
   res.render("doctor-dashboard", {
     currentUser: req.user,
-    qrPath,
+    
     patients,
     appointments,
   });
@@ -856,6 +861,5 @@ app.get("/logout", (req, res) => {
   });
 });
 
-server.listen(process.env.PORT, () => {
-  console.log("Server running on port 10000");
-});
+module.exports = app; // 👈 export instead of listen()
+
