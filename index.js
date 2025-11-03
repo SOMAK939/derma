@@ -311,7 +311,8 @@ const localQrPath = path.join("/tmp", `${newDoctor._id}.png`);
 fs.copyFileSync(qrFilePath, localQrPath);
 
 
-      newDoctor.qr = `/qrcodes/${newDoctor._id}.png`;
+      newDoctor.qr = result.Location; // store the real S3 URL
+
       await newDoctor.save();
 
       
